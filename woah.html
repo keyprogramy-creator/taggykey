@@ -1,0 +1,921 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kewl Game - Grass Patch</title>
+
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎮</text></svg>">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body, html { width: 100%; height: 100%; overflow: hidden; background-color: #05050a; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; user-select: none; }
+        #canvas-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
+        canvas { width: 100%; height: 100%; display: block; transition: filter 0.3s ease; }
+        
+        .paused-blur { filter: blur(12px) brightness(0.7); }
+
+        #ui-overlay {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            z-index: 2; text-align: center; width: 100%; max-width: 450px; padding: 30px;
+            background: rgba(10, 10, 20, 0.85); border: 1px solid rgba(0, 240, 255, 0.3);
+            border-radius: 16px; backdrop-filter: blur(10px); transition: opacity 0.3s ease;
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.8);
+        }
+
+        .title {
+            font-size: 3.5rem; font-weight: 900; color: #ffffff; text-transform: uppercase; letter-spacing: 4px;
+            text-shadow: 0 0 10px rgba(0, 240, 255, 0.8), 0 0 20px rgba(0, 240, 255, 0.5);
+            animation: pulse 2s infinite ease-in-out; margin-bottom: 25px;
+        }
+
+        #loading-section { margin-bottom: 10px; }
+        .progress-box { width: 100%; height: 12px; background: rgba(255, 255, 255, 0.1); border-radius: 6px; border: 1px solid rgba(0, 240, 255, 0.3); overflow: hidden; position: relative; }
+        .progress-bar { width: 0%; height: 100%; background: linear-gradient(90deg, #00f0ff, #b400ff); transition: width 0.1s linear; }
+        .status-text { color: #8a8aab; font-size: 0.85rem; margin-top: 12px; letter-spacing: 2px; text-transform: uppercase; }
+
+        #username-form { display: none; opacity: 0; transition: opacity 0.5s ease; }
+        .input-group { margin-bottom: 15px; }
+        .input-box {
+            width: 100%; padding: 12px 18px; font-size: 1rem; font-weight: 600; color: #ffffff;
+            background: rgba(15, 15, 35, 0.9); border: 1px solid rgba(0, 240, 255, 0.5); border-radius: 8px; outline: none; text-align: center;
+        }
+        .input-box:focus { border-color: #00f0ff; box-shadow: 0 0 15px rgba(0, 240, 255, 0.6); }
+
+        .btn-container { display: flex; justify-content: center; gap: 12px; margin-top: 15px; }
+        .btn {
+            flex: 1; padding: 12px 20px; font-size: 0.85rem; font-weight: 700; color: #ffffff;
+            background: linear-gradient(90deg, #00f0ff, #b400ff); border: none; border-radius: 20px; cursor: pointer; text-transform: uppercase; letter-spacing: 1px;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .btn:hover { transform: translateY(-2px); box-shadow: 0 0 12px rgba(0, 240, 255, 0.5); }
+        .btn-secondary { background: rgba(255, 255, 255, 0.15); border: 1px solid rgba(0, 240, 255, 0.4); }
+
+        #pause-menu { display: none; }
+        .pause-title {
+            font-size: 1.8rem; font-weight: 900; color: #ffffff; letter-spacing: 2px;
+            text-shadow: 0 0 10px rgba(0, 240, 255, 0.8); margin-bottom: 20px; text-transform: uppercase;
+        }
+
+        .controls-card {
+            margin-top: 25px; padding: 10px 15px; background: rgba(0, 0, 0, 0.4); border: 1px solid rgba(0, 240, 255, 0.2);
+            border-radius: 12px; color: rgba(255, 255, 255, 0.7); font-size: 0.75rem; letter-spacing: 1px; text-transform: uppercase;
+        }
+
+        #username-display {
+            display: none; position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+            z-index: 3; color: #ffffff; font-size: 1.2rem; font-weight: 800; letter-spacing: 2px; text-transform: uppercase;
+            text-shadow: 0 0 8px rgba(0, 240, 255, 0.8); background: rgba(0, 0, 0, 0.4); padding: 8px 20px; border-radius: 20px; border: 1px solid rgba(0, 240, 255, 0.3); pointer-events: none;
+        }
+
+        #room-code-display {
+            display: none; position: absolute; top: 64px; left: 50%; transform: translateX(-50%);
+            z-index: 3; color: #00f0ff; font-size: 0.75rem; font-weight: 700; letter-spacing: 1px;
+            background: rgba(0, 0, 0, 0.55); padding: 6px 12px; border-radius: 12px;
+            border: 1px solid rgba(0, 240, 255, 0.35); pointer-events: none;
+        }
+
+        #remote-nametag {
+            display: none; position: absolute; z-index: 3; text-align: center;
+            transform: translate(-50%, -100%); pointer-events: none; white-space: nowrap;
+        }
+
+        #online-players {
+            display: none; position: absolute; top: 20px; right: 20px; z-index: 3;
+            min-width: 170px; padding: 12px 14px; color: #ffffff; background: rgba(0, 0, 0, 0.55);
+            border: 1px solid rgba(0, 240, 255, 0.35); border-radius: 10px; pointer-events: none;
+            font-size: 0.75rem; text-align: left;
+        }
+        #online-players strong { display: block; color: #00f0ff; margin-bottom: 6px; letter-spacing: 1px; }
+        #online-player-list { color: rgba(255, 255, 255, 0.85); line-height: 1.6; }
+
+        #world-status {
+            display: none; position: absolute; left: 20px; top: 20px; z-index: 3;
+            min-width: 150px; padding: 10px 12px; color: #ffffff; background: rgba(0, 0, 0, 0.55);
+            border: 1px solid rgba(0, 240, 255, 0.35); border-radius: 10px; pointer-events: none;
+            font-size: 0.72rem; line-height: 1.6; letter-spacing: 1px;
+        }
+        #world-status strong { display: block; color: #00f0ff; letter-spacing: 1.5px; }
+
+        #weather-overlay {
+            display: none; position: absolute; inset: 0; z-index: 2; pointer-events: none;
+            transition: opacity 1s ease, background-color 1s ease;
+        }
+        #weather-overlay.cloudy { display: block; background: rgba(70, 80, 105, 0.16); }
+        #weather-overlay.rain {
+            display: block; opacity: 0.5;
+            background: repeating-linear-gradient(105deg, transparent 0 18px, rgba(150, 210, 255, 0.42) 19px 20px, transparent 21px 34px);
+            animation: rainfall 0.45s linear infinite;
+        }
+        @keyframes rainfall { from { background-position: 0 0; } to { background-position: -18px 42px; } }
+
+        .nametag-title {
+            color: #ffffff; font-size: 0.85rem; font-weight: 800; letter-spacing: 1px;
+            text-transform: uppercase; text-shadow: 0 0 5px rgba(255, 0, 85, 0.8); background: rgba(255, 0, 85, 0.85);
+            padding: 4px 12px; border-radius: 12px; border: 1px solid #ffffff; display: inline-block;
+        }
+
+        .nametag-dist {
+            color: #00f0ff; font-size: 0.75rem; font-weight: 700; margin-top: 2px;
+            text-shadow: 0 0 4px rgba(0, 0, 0, 0.9); background: rgba(0, 0, 0, 0.6);
+            padding: 2px 8px; border-radius: 8px; display: inline-block; border: 1px solid rgba(0, 240, 255, 0.4);
+        }
+
+        #crosshair { display: none; position: absolute; top: 50%; left: 50%; width: 10px; height: 10px; transform: translate(-50%, -50%); z-index: 3; pointer-events: none; }
+        #crosshair::before, #crosshair::after { content: ''; position: absolute; background: rgba(255, 255, 255, 0.8); }
+        #crosshair::before { top: 4px; left: 0; width: 10px; height: 2px; }
+        #crosshair::after { top: 0; left: 4px; width: 2px; height: 10px; }
+
+        @keyframes pulse { 0%, 100% { transform: scale(1); opacity: 0.95; } 50% { transform: scale(1.03); opacity: 1; } }
+    </style>
+</head>
+<body>
+
+    <div id="canvas-container">
+        <canvas id="glcanvas"></canvas>
+    </div>
+
+    <div id="ui-overlay">
+        <div class="title">GRASS PATCH</div>
+        
+        <div id="loading-section">
+            <div class="progress-box"><div class="progress-bar" id="progress-bar"></div></div>
+            <div class="status-text" id="status-text">LOADING ASSETS... 0%</div>
+        </div>
+        
+        <div id="username-form">
+            <div class="input-group">
+                <input type="text" id="username-input" class="input-box" placeholder="Enter Username..." maxlength="12" autocomplete="off">
+            </div>
+            
+            <div class="input-group">
+                <input type="text" id="room-input" class="input-box" placeholder="Room Code (to Join)..." maxlength="6" autocomplete="off" style="text-transform: uppercase;">
+            </div>
+
+            <div class="btn-container">
+                <button id="host-btn" class="btn">Host Game</button>
+                <button id="join-btn" class="btn btn-secondary">Join Game</button>
+            </div>
+            
+            <div class="controls-card">WASD to Move | SPACE to Jump | ESC to Pause</div>
+        </div>
+
+        <div id="pause-menu">
+            <div class="pause-title">GO BACK TO MENU?</div>
+            <div class="btn-container">
+                <button id="pause-yes-btn" class="btn">YES</button>
+                <button id="pause-no-btn" class="btn btn-secondary">NO</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="username-display"></div>
+    <div id="room-code-display"></div>
+    <div id="world-status">
+        <strong id="weather-label">SUNNY</strong>
+        <span id="time-label">DAY 00:00</span><br>
+        <span id="fps-label">FPS 60</span>
+    </div>
+    <div id="online-players">
+        <strong>ONLINE PLAYERS</strong>
+        <div id="online-player-list"></div>
+    </div>
+    <div id="remote-nametag">
+        <div class="nametag-title" id="nametag-name">PLAYER 2</div>
+        <div><span class="nametag-dist" id="nametag-distance">0.0m</span></div>
+    </div>
+    <div id="crosshair"></div>
+    <div id="weather-overlay"></div>
+
+    <script>
+        class Vec3 {
+            constructor(x=0, y=0, z=0) { this.x = x; this.y = y; this.z = z; }
+            set(x, y, z) { this.x = x; this.y = y; this.z = z; return this; }
+            add(v) { return new Vec3(this.x + v.x, this.y + v.y, this.z + v.z); }
+            sub(v) { return new Vec3(this.x - v.x, this.y - v.y, this.z - v.z); }
+            scale(s) { return new Vec3(this.x * s, this.y * s, this.z * s); }
+            length() { return Math.sqrt(this.x*this.x + this.y*this.y + this.z*this.z); }
+            normalize() { let len = this.length(); return len > 0 ? new Vec3(this.x/len, this.y/len, this.z/len) : new Vec3(); }
+            cross(v) { return new Vec3(this.y * v.z - this.z * v.y, this.z * v.x - this.x * v.z, this.x * v.y - this.y * v.x); }
+        }
+
+        class Quat {
+            constructor(x=0, y=0, z=0, w=1) { this.x = x; this.y = y; this.z = z; this.w = w; }
+            static fromAxisAngle(axis, angle) {
+                let halfAngle = angle * 0.5, s = Math.sin(halfAngle), normAxis = axis.normalize();
+                return new Quat(normAxis.x * s, normAxis.y * s, normAxis.z * s, Math.cos(halfAngle));
+            }
+            multiply(q) {
+                return new Quat(
+                    this.w * q.x + this.x * q.w + this.y * q.z - this.z * q.y,
+                    this.w * q.y - this.x * q.z + this.y * q.w + this.z * q.x,
+                    this.w * q.z + this.x * q.y - this.y * q.x + this.z * q.w,
+                    this.w * q.w - this.x * q.x - this.y * q.y - this.z * q.z
+                ).normalize();
+            }
+            normalize() {
+                let len = Math.sqrt(this.x*this.x + this.y*this.y + this.z*this.z + this.w*this.w);
+                return len === 0 ? new Quat(0, 0, 0, 1) : new Quat(this.x/len, this.y/len, this.z/len, this.w/len);
+            }
+            rotateVector(v) {
+                let qv = new Vec3(this.x, this.y, this.z);
+                let uv = qv.cross(v), uuv = qv.cross(uv);
+                return v.add(uv.scale(2.0 * this.w)).add(uuv.scale(2.0));
+            }
+            toMat4() {
+                let x = this.x, y = this.y, z = this.z, w = this.w;
+                let xx = x*x, yy = y*y, zz = z*z, xy = x*y, xz = x*z, yz = y*z, wx = w*x, wy = w*y, wz = w*z;
+                return new Float32Array([
+                    1 - 2*(yy + zz), 2*(xy + wz),     2*(xz - wy),     0,
+                    2*(xy - wz),     1 - 2*(xx + zz), 2*(yz + wx),     0,
+                    2*(xz + wy),     2*(yz - wx),     1 - 2*(xx + yy), 0,
+                    0,                0,                0,                1
+                ]);
+            }
+        }
+
+        function createPerspectiveMatrix(fovRad, aspect, near, far) {
+            let f = Math.tan(Math.PI * 0.5 - 0.5 * fovRad), rangeInv = 1.0 / (near - far);
+            return new Float32Array([f / aspect, 0, 0, 0, 0, f, 0, 0, 0, 0, (near + far) * rangeInv, -1, 0, 0, near * far * rangeInv * 2, 0]);
+        }
+
+        function multiplyMatrices(a, b) {
+            let out = new Float32Array(16);
+            for (let i = 0; i < 4; i++) {
+                for (let j = 0; j < 4; j++) {
+                    out[j*4 + i] = a[i]*b[j*4] + a[i+4]*b[j*4+1] + a[i+8]*b[j*4+2] + a[i+12]*b[j*4+3];
+                }
+            }
+            return out;
+        }
+
+        function createTranslationMatrix(x, y, z) {
+            return new Float32Array([
+                1, 0, 0, 0,
+                0, 1, 0, 0,
+                0, 0, 1, 0,
+                x, y, z, 1
+            ]);
+        }
+
+        function createScaleMatrix(sx, sy, sz) {
+            return new Float32Array([
+                sx, 0, 0, 0,
+                0, sy, 0, 0,
+                0, 0, sz, 0,
+                0, 0, 0, 1
+            ]);
+        }
+
+        function createRotationXMatrix(angle) {
+            let c = Math.cos(angle), s = Math.sin(angle);
+            return new Float32Array([
+                1, 0, 0, 0,
+                0, c, s, 0,
+                0, -s, c, 0,
+                0, 0, 0, 1
+            ]);
+        }
+
+        function createRotationYMatrix(angle) {
+            let c = Math.cos(angle), s = Math.sin(angle);
+            return new Float32Array([
+                c, 0, -s, 0,
+                0, 1, 0, 0,
+                s, 0, c, 0,
+                0, 0, 0, 1
+            ]);
+        }
+
+        const canvas = document.getElementById("glcanvas");
+        const gl = canvas.getContext("webgl");
+
+        const vsLoading = `attribute vec2 a_position; void main() { gl_Position = vec4(a_position, 0.0, 1.0); }`;
+        const fsLoading = `
+            precision mediump float; uniform vec2 u_resolution; uniform float u_time;
+            void main() {
+                vec2 st = (gl_FragCoord.xy * 2.0 - u_resolution) / min(u_resolution.x, u_resolution.y);
+                float dist = length(st + vec2(sin(st.x * 3.0 + u_time * 2.0) * 0.2, cos(st.y * 4.0 - u_time * 1.5) * 0.2));
+                vec3 color = vec3(0.02, 0.02, 0.05) + mix(vec3(0.0, 0.8, 1.0), vec3(0.7, 0.0, 1.0), sin(u_time) * 0.5 + 0.5) * (0.2 / (dist + 0.3)) * 0.6;
+                gl_FragColor = vec4(color, 1.0);
+            }
+        `;
+
+        const vsGame = `
+            attribute vec3 a_position; attribute vec3 a_normal;
+            uniform mat4 u_modelViewProjection;
+            varying vec3 v_normal;
+            void main() {
+                v_normal = a_normal;
+                gl_Position = u_modelViewProjection * vec4(a_position, 1.0);
+            }
+        `;
+
+        const fsGame = `
+            precision mediump float; varying vec3 v_normal;
+            uniform vec3 u_color; uniform vec3 u_lightDirection;
+            void main() {
+                float diff = max(dot(normalize(v_normal), -u_lightDirection), 0.3);
+                gl_FragColor = vec4(u_color * diff, 1.0);
+            }
+        `;
+
+        function createProgram(gl, vs, fs) {
+            const p = gl.createProgram();
+            const compile = (type, source) => {
+                const s = gl.createShader(type); gl.shaderSource(s, source); gl.compileShader(s); return s;
+            };
+            gl.attachShader(p, compile(gl.VERTEX_SHADER, vs));
+            gl.attachShader(p, compile(gl.FRAGMENT_SHADER, fs));
+            gl.linkProgram(p);
+            return p;
+        }
+
+        const loadingProgram = createProgram(gl, vsLoading, fsLoading);
+        const gameProgram = createProgram(gl, vsGame, fsGame);
+
+        const quadBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, -1,1, 1,-1, 1,1]), gl.STATIC_DRAW);
+
+        const unitCubePositions = new Float32Array([
+            -0.5,-0.5,-0.5,  0.5,-0.5,-0.5,  0.5, 0.5,-0.5, -0.5,-0.5,-0.5,  0.5, 0.5,-0.5, -0.5, 0.5,-0.5,
+            -0.5,-0.5, 0.5, -0.5, 0.5, 0.5,  0.5, 0.5, 0.5, -0.5,-0.5, 0.5,  0.5, 0.5, 0.5,  0.5,-0.5, 0.5,
+            -0.5,-0.5,-0.5, -0.5, 0.5,-0.5, -0.5, 0.5, 0.5, -0.5,-0.5,-0.5, -0.5, 0.5, 0.5, -0.5,-0.5, 0.5,
+             0.5,-0.5,-0.5,  0.5,-0.5, 0.5,  0.5, 0.5, 0.5,  0.5,-0.5,-0.5,  0.5, 0.5, 0.5,  0.5, 0.5,-0.5,
+            -0.5, 0.5,-0.5,  0.5, 0.5,-0.5,  0.5, 0.5, 0.5, -0.5, 0.5,-0.5,  0.5, 0.5, 0.5, -0.5, 0.5, 0.5,
+            -0.5,-0.5,-0.5, -0.5,-0.5, 0.5,  0.5,-0.5, 0.5, -0.5,-0.5,-0.5,  0.5,-0.5, 0.5,  0.5,-0.5,-0.5
+        ]);
+
+        const unitCubeNormals = new Float32Array([
+            0,0,-1, 0,0,-1, 0,0,-1, 0,0,-1, 0,0,-1, 0,0,-1,
+            0,0, 1, 0,0, 1, 0,0, 1, 0,0, 1, 0,0, 1, 0,0, 1,
+           -1,0, 0,-1,0, 0,-1,0, 0,-1,0, 0,-1,0, 0,-1,0, 0,
+            1,0, 0, 1,0, 0, 1,0, 0, 1,0, 0, 1,0, 0, 1,0, 0,
+            0,1, 0, 0,1, 0, 0,1, 0, 0,1, 0, 0,1, 0, 0,1, 0,
+            0,-1,0, 0,-1,0, 0,-1,0, 0,-1,0, 0,-1,0, 0,-1,0
+        ]);
+
+        const cubeBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, cubeBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, unitCubePositions, gl.STATIC_DRAW);
+
+        const cubeNormBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, cubeNormBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, unitCubeNormals, gl.STATIC_DRAW);
+
+        // Flat 300x300 grass patch
+        const platforms = [
+            { x: 0, y: 0, z: 0, sizeX: 300, sizeY: 0.5, sizeZ: 300, color: [0.16, 0.62, 0.12] }
+        ];
+
+        let gameState = "LOADING";
+        let isPaused = false;
+        let localPlayerName = "PLAYER 1";
+        const WEATHER_CYCLE_SECONDS = 20 * 60;
+        const FIXED_STEP = 1 / 60;
+        const MAX_SIMULATION_STEPS = 8;
+        let simulationSeconds = 0;
+        let accumulator = 0;
+        let fpsFrameCount = 0;
+        let fpsTimer = 0;
+        let displayedFps = 0;
+        
+        const SPAWN_POINT = new Vec3(0, 1.95, 0);
+        let cameraPos = new Vec3(SPAWN_POINT.x, SPAWN_POINT.y, SPAWN_POINT.z);
+        let cameraRot = new Quat(0, 0, 0, 1);
+        let pitch = 0, yaw = 0;
+        let velocityY = 0, isGrounded = true;
+        const keys = { w: false, a: false, s: false, d: false, space: false };
+
+        const SERVER_URL = window.GAME_SERVER_URL || (window.location.hostname === "localhost" || window.location.protocol === "file:" ? "ws://localhost:8080" : `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}`);
+        let socket = null;
+        let serverPlayerId = null;
+        let sessionToken = null;
+        let currentRoomCode = "";
+        const remotePlayers = new Map();
+
+        function updateOnlinePlayers() {
+            const names = [localPlayerName, ...Array.from(remotePlayers.values()).map(player => player.username)];
+            document.getElementById("online-player-list").innerText = names.map((name, index) => `${index === 0 ? "YOU: " : ""}${name}`).join("\n");
+        }
+
+        function removeRemotePlayer(playerId) {
+            remotePlayers.delete(playerId);
+            updateOnlinePlayers();
+            if (remotePlayers.size === 0) document.getElementById("remote-nametag").style.display = "none";
+        }
+
+        function createRemotePlayer(playerId, username, data = {}) {
+            const x = data.x ?? cameraPos.x;
+            const y = data.y ?? 0;
+            const z = data.z ?? cameraPos.z - 5;
+            return {
+                id: playerId, username, x, y, z, targetX: x, targetY: y, targetZ: z,
+                rotY: data.rotY || 0, targetRotY: data.rotY || 0, walkCycle: 0, isMoving: false
+            };
+        }
+
+        function initServer(roomCode) {
+            socket = new WebSocket(SERVER_URL);
+            socket.addEventListener("open", () => socket.send(JSON.stringify({ type: "join", room: roomCode, username: localPlayerName })));
+            socket.addEventListener("error", () => alert(`Could not connect to the game server. Configure GAME_SERVER_URL with your WebSocket backend.\n\nCurrent URL: ${SERVER_URL}`));
+            socket.addEventListener("message", event => {
+                let data;
+                try { data = JSON.parse(event.data); } catch { return; }
+                if (data.type === "joined") {
+                    serverPlayerId = data.id;
+                    sessionToken = data.sessionToken;
+                    data.players.forEach(player => remotePlayers.set(player.id, createRemotePlayer(player.id, player.username, player)));
+                    updateOnlinePlayers();
+                } else if (data.type === "player_joined") {
+                    remotePlayers.set(data.player.id, createRemotePlayer(data.player.id, data.player.username, data.player));
+                    updateOnlinePlayers();
+                } else if (data.type === "player_left") {
+                    removeRemotePlayer(data.id);
+                } else if (data.type === "state") {
+                    if (data.player.id === serverPlayerId) return;
+                    const player = data.player;
+                    if (!remotePlayers.has(player.id)) remotePlayers.set(player.id, createRemotePlayer(player.id, player.username, player));
+                    const remotePlayer = remotePlayers.get(player.id);
+                    remotePlayer.targetX = player.x;
+                    remotePlayer.targetY = player.y;
+                    remotePlayer.targetZ = player.z;
+                    remotePlayer.targetRotY = player.rotY || 0;
+                } else if (data.type === "state_rejected") {
+                    cameraPos = new Vec3(data.player.x, data.player.y + 1.7, data.player.z);
+                } else if (data.type === "error") {
+                    alert(data.message);
+                }
+            });
+            socket.addEventListener("close", () => {
+                serverPlayerId = null;
+                sessionToken = null;
+                remotePlayers.clear();
+                updateOnlinePlayers();
+            });
+        }
+
+        setInterval(() => {
+            if (gameState === "PLAYING" && !isPaused) {
+                const move = {
+                    type: "move",
+                    sessionToken,
+                    x: cameraPos.x,
+                    y: cameraPos.y - 1.7,
+                    z: cameraPos.z,
+                    rotY: yaw
+                };
+                if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(move));
+            }
+        }, 1000 / 60);
+
+        document.addEventListener('mousemove', (e) => {
+            if (document.pointerLockElement !== canvas || isPaused) return;
+            yaw -= e.movementX * 0.002;
+            pitch -= e.movementY * 0.002;
+            pitch = Math.max(-Math.PI/2 + 0.01, Math.min(Math.PI/2 - 0.01, pitch));
+            cameraRot = Quat.fromAxisAngle(new Vec3(0, 1, 0), yaw).multiply(Quat.fromAxisAngle(new Vec3(1, 0, 0), pitch));
+        });
+
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'Escape' && gameState === "PLAYING") {
+                if (!isPaused) { pauseGame(); } else { resumeGame(); }
+                return;
+            }
+
+            if (gameState !== "PLAYING" || isPaused) return;
+            if (e.code === 'KeyW') keys.w = true;
+            if (e.code === 'KeyS') keys.s = true;
+            if (e.code === 'KeyA') keys.a = true;
+            if (e.code === 'KeyD') keys.d = true;
+            if (e.code === 'Space') keys.space = true;
+        });
+
+        window.addEventListener('keyup', (e) => {
+            if (e.code === 'KeyW') keys.w = false;
+            if (e.code === 'KeyS') keys.s = false;
+            if (e.code === 'KeyA') keys.a = false;
+            if (e.code === 'KeyD') keys.d = false;
+            if (e.code === 'Space') keys.space = false;
+        });
+
+        function requestSafePointerLock() {
+            if (document.pointerLockElement !== canvas) {
+                try {
+                    let promise = canvas.requestPointerLock();
+                    if (promise && promise.catch) { promise.catch(() => {}); }
+                } catch(e) {}
+            }
+        }
+
+        canvas.addEventListener('click', () => { 
+            if (gameState === "PLAYING" && !isPaused) requestSafePointerLock(); 
+        });
+
+        function pauseGame() {
+            isPaused = true;
+            document.exitPointerLock();
+            keys.w = keys.a = keys.s = keys.d = keys.space = false;
+
+            document.getElementById("loading-section").style.display = "none";
+            document.getElementById("username-form").style.display = "none";
+            document.getElementById("pause-menu").style.display = "block";
+            
+            const overlay = document.getElementById("ui-overlay");
+            overlay.style.display = "block";
+            overlay.style.opacity = "1";
+            
+            document.getElementById("glcanvas").classList.add("paused-blur");
+            document.getElementById("remote-nametag").style.display = "none";
+        }
+
+        function resumeGame() {
+            isPaused = false;
+            document.getElementById("pause-menu").style.display = "none";
+            
+            const overlay = document.getElementById("ui-overlay");
+            overlay.style.opacity = "0";
+            setTimeout(() => { if (!isPaused) overlay.style.display = "none"; }, 300);
+            
+            document.getElementById("glcanvas").classList.remove("paused-blur");
+            requestSafePointerLock();
+        }
+
+        function exitToMenu() {
+            if (socket) { socket.close(); socket = null; }
+            serverPlayerId = null;
+            sessionToken = null;
+            remotePlayers.clear();
+            isPaused = false;
+            gameState = "READY";
+
+            document.getElementById("glcanvas").classList.remove("paused-blur");
+            document.getElementById("crosshair").style.display = "none";
+            document.getElementById("username-display").style.display = "none";
+            document.getElementById("room-code-display").style.display = "none";
+            document.getElementById("world-status").style.display = "none";
+            document.getElementById("online-players").style.display = "none";
+            document.getElementById("remote-nametag").style.display = "none";
+
+            document.getElementById("pause-menu").style.display = "none";
+            document.getElementById("loading-section").style.display = "none";
+            
+            const usernameForm = document.getElementById("username-form");
+            usernameForm.style.display = "block";
+            usernameForm.style.opacity = "1";
+
+            const overlay = document.getElementById("ui-overlay");
+            overlay.style.display = "block";
+            overlay.style.opacity = "1";
+        }
+
+        document.getElementById("pause-no-btn").addEventListener("click", resumeGame);
+        document.getElementById("pause-yes-btn").addEventListener("click", exitToMenu);
+
+        const hostBtn = document.getElementById("host-btn");
+        const joinBtn = document.getElementById("join-btn");
+        const usernameInput = document.getElementById("username-input");
+        const roomInput = document.getElementById("room-input");
+
+        hostBtn.addEventListener("click", () => {
+            localPlayerName = usernameInput.value.trim() || "HOST";
+            const generatedCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+            currentRoomCode = generatedCode;
+            alert("ROOM CODE: " + generatedCode + "\nShare this code with everyone who should join!");
+            initServer(generatedCode);
+            startGame();
+        });
+
+        joinBtn.addEventListener("click", () => {
+            localPlayerName = usernameInput.value.trim() || "GUEST";
+            const code = roomInput.value.trim().toUpperCase();
+            if (!code) return alert("Enter a Room Code!");
+            currentRoomCode = code;
+            initServer(code);
+            startGame();
+        });
+
+        function startGame() {
+            gameState = "PLAYING";
+            isPaused = false;
+            chooseSpawnTime();
+            cameraPos = new Vec3(SPAWN_POINT.x, SPAWN_POINT.y, SPAWN_POINT.z);
+            velocityY = 0;
+            
+            document.getElementById("username-display").innerText = localPlayerName;
+            document.getElementById("room-code-display").innerText = `ROOM CODE: ${currentRoomCode}`;
+            
+            const overlay = document.getElementById("ui-overlay");
+            overlay.style.opacity = "0";
+            setTimeout(() => overlay.style.display = "none", 500);
+
+            document.getElementById("crosshair").style.display = "block";
+            document.getElementById("username-display").style.display = "block";
+            document.getElementById("room-code-display").style.display = "block";
+            document.getElementById("world-status").style.display = "block";
+            document.getElementById("online-players").style.display = "block";
+            updateWorldStatus();
+            updateOnlinePlayers();
+            requestSafePointerLock();
+        }
+
+        let progress = 0;
+        const loadingInterval = setInterval(() => {
+            progress += 20;
+            if (progress >= 100) {
+                clearInterval(loadingInterval);
+                gameState = "READY";
+                document.getElementById("loading-section").style.display = "none";
+                document.getElementById("username-form").style.display = "block";
+                setTimeout(() => document.getElementById("username-form").style.opacity = "1", 50);
+            }
+            document.getElementById("progress-bar").style.width = `${progress}%`;
+        }, 50);
+
+        let lastTime = 0;
+
+        function checkPlatformCollisions() {
+            let feetY = cameraPos.y - 1.7;
+            let groundedThisFrame = false;
+
+            for (let plat of platforms) {
+                let minX = plat.x - plat.sizeX / 2;
+                let maxX = plat.x + plat.sizeX / 2;
+                let minZ = plat.z - plat.sizeZ / 2;
+                let maxZ = plat.z + plat.sizeZ / 2;
+                let topY = plat.y + plat.sizeY / 2;
+
+                if (cameraPos.x >= minX && cameraPos.x <= maxX && cameraPos.z >= minZ && cameraPos.z <= maxZ) {
+                    if (feetY <= topY && feetY >= topY - 0.5 && velocityY <= 0) {
+                        cameraPos.y = topY + 1.7;
+                        velocityY = 0;
+                        groundedThisFrame = true;
+                        break;
+                    }
+                }
+            }
+
+            isGrounded = groundedThisFrame;
+        }
+
+        function updateWorldStatus() {
+            const cycleTime = simulationSeconds % WEATHER_CYCLE_SECONDS;
+            const phase = cycleTime / WEATHER_CYCLE_SECONDS;
+            const hour = phase * 24;
+            const isDaytime = hour >= 8 && hour < 18;
+            const weather = isDaytime ? "SUNNY" : (Math.floor(simulationSeconds / 90) % 2 === 0 ? "CLOUDY" : "RAIN");
+            const clockHour = Math.floor(hour) % 24;
+            const clockMinutes = Math.floor((hour - Math.floor(hour)) * 60);
+            const formattedHour = (clockHour % 12 || 12).toString().padStart(2, "0");
+            const meridiem = clockHour < 12 ? "AM" : "PM";
+            const period = hour < 6 ? "NIGHT" : hour < 8 ? "MORNING" : hour < 18 ? "DAY" : hour < 20 ? "EVENING" : "NIGHT";
+            const weatherOverlay = document.getElementById("weather-overlay");
+
+            document.getElementById("weather-label").innerText = weather;
+            document.getElementById("time-label").innerText = `${period} ${formattedHour}:${clockMinutes.toString().padStart(2, "0")} ${meridiem}`;
+            weatherOverlay.className = weather.toLowerCase();
+        }
+
+        function chooseSpawnTime() {
+            const startsInPopularWindow = Math.random() < 0.7;
+            const spawnHour = startsInPopularWindow ? 8 + Math.random() * 7 : Math.random() * 24;
+            simulationSeconds = (spawnHour / 24) * WEATHER_CYCLE_SECONDS;
+        }
+
+        function updateFps(frameSeconds) {
+            fpsFrameCount++;
+            fpsTimer += frameSeconds;
+            if (fpsTimer >= 0.5) {
+                displayedFps = Math.round(fpsFrameCount / fpsTimer);
+                fpsFrameCount = 0;
+                fpsTimer = 0;
+                document.getElementById("fps-label").innerText = `FPS ${displayedFps}`;
+            }
+        }
+
+        function update(dt) {
+            if (gameState !== "PLAYING" || isPaused) return;
+
+            simulationSeconds = (simulationSeconds + dt) % WEATHER_CYCLE_SECONDS;
+            updateWorldStatus();
+
+            let qYaw = Quat.fromAxisAngle(new Vec3(0, 1, 0), yaw);
+            let forward = qYaw.rotateVector(new Vec3(0, 0, -1)).normalize();
+            let right = qYaw.rotateVector(new Vec3(1, 0, 0)).normalize();
+            let moveDir = new Vec3();
+
+            if (keys.w) moveDir = moveDir.add(forward);
+            if (keys.s) moveDir = moveDir.sub(forward);
+            if (keys.d) moveDir = moveDir.add(right);
+            if (keys.a) moveDir = moveDir.sub(right);
+
+            if (moveDir.length() > 0) cameraPos = cameraPos.add(moveDir.normalize().scale(10.0 * dt));
+
+            if (keys.space && isGrounded) { 
+                velocityY = 9.0; 
+                isGrounded = false; 
+            }
+            
+            velocityY += -25.0 * dt;
+            cameraPos.y += velocityY * dt;
+
+            checkPlatformCollisions();
+
+            // Reset if player falls into the void
+            if (cameraPos.y < -15.0) {
+                cameraPos = new Vec3(SPAWN_POINT.x, SPAWN_POINT.y, SPAWN_POINT.z);
+                velocityY = 0;
+            }
+
+            const lerpFactor = Math.min(1.0, dt * 18.0);
+            remotePlayers.forEach(remotePlayer => {
+                let prevX = remotePlayer.x, prevZ = remotePlayer.z;
+                remotePlayer.x += (remotePlayer.targetX - remotePlayer.x) * lerpFactor;
+                remotePlayer.y += (remotePlayer.targetY - remotePlayer.y) * lerpFactor;
+                remotePlayer.z += (remotePlayer.targetZ - remotePlayer.z) * lerpFactor;
+                remotePlayer.rotY += (remotePlayer.targetRotY - remotePlayer.rotY) * lerpFactor;
+
+                let distMoved = Math.hypot(remotePlayer.x - prevX, remotePlayer.z - prevZ);
+                remotePlayer.isMoving = distMoved > 0.005;
+                if (remotePlayer.isMoving) { remotePlayer.walkCycle += dt * 12.0; } else { remotePlayer.walkCycle = 0; }
+            });
+        }
+
+        function drawCube(viewProj, transformMatrix, color, uMVP, uColor, aPos, aNorm) {
+            let finalMVP = multiplyMatrices(viewProj, transformMatrix);
+            gl.uniformMatrix4fv(uMVP, false, finalMVP);
+            gl.uniform3fv(uColor, color);
+
+            gl.bindBuffer(gl.ARRAY_BUFFER, cubeBuffer);
+            gl.vertexAttribPointer(aPos, 3, gl.FLOAT, false, 0, 0);
+
+            gl.bindBuffer(gl.ARRAY_BUFFER, cubeNormBuffer);
+            gl.vertexAttribPointer(aNorm, 3, gl.FLOAT, false, 0, 0);
+
+            gl.drawArrays(gl.TRIANGLES, 0, 36);
+        }
+
+        function renderHumanoid(viewProj, player, uMVP, uColor, aPos, aNorm) {
+            const COLOR_SKIN = [0.93, 0.76, 0.65];
+            const COLOR_RED_SHIRT = [0.85, 0.1, 0.1];
+            const COLOR_BLACK_TROUSERS = [0.1, 0.1, 0.12];
+            const COLOR_BEANIE = [0.15, 0.15, 0.18];
+
+            let root = createTranslationMatrix(player.x, player.y, player.z);
+            root = multiplyMatrices(root, createRotationYMatrix(player.rotY));
+
+            let swing = Math.sin(player.walkCycle) * 0.6;
+
+            let torsoMat = multiplyMatrices(root, createTranslationMatrix(0, 0.9, 0));
+            torsoMat = multiplyMatrices(torsoMat, createScaleMatrix(0.5, 0.6, 0.25));
+            drawCube(viewProj, torsoMat, COLOR_RED_SHIRT, uMVP, uColor, aPos, aNorm);
+
+            let headMat = multiplyMatrices(root, createTranslationMatrix(0, 1.35, 0));
+            headMat = multiplyMatrices(headMat, createScaleMatrix(0.3, 0.3, 0.3));
+            drawCube(viewProj, headMat, COLOR_SKIN, uMVP, uColor, aPos, aNorm);
+
+            let beanieMat = multiplyMatrices(root, createTranslationMatrix(0, 1.52, 0));
+            beanieMat = multiplyMatrices(beanieMat, createScaleMatrix(0.34, 0.12, 0.34));
+            drawCube(viewProj, beanieMat, COLOR_BEANIE, uMVP, uColor, aPos, aNorm);
+
+            let lArmMat = multiplyMatrices(root, createTranslationMatrix(-0.35, 1.15, 0));
+            lArmMat = multiplyMatrices(lArmMat, createRotationXMatrix(swing));
+            lArmMat = multiplyMatrices(lArmMat, createTranslationMatrix(0, -0.25, 0));
+            lArmMat = multiplyMatrices(lArmMat, createScaleMatrix(0.16, 0.5, 0.16));
+            drawCube(viewProj, lArmMat, COLOR_RED_SHIRT, uMVP, uColor, aPos, aNorm);
+
+            let rArmMat = multiplyMatrices(root, createTranslationMatrix(0.35, 1.15, 0));
+            rArmMat = multiplyMatrices(rArmMat, createRotationXMatrix(-swing));
+            rArmMat = multiplyMatrices(rArmMat, createTranslationMatrix(0, -0.25, 0));
+            rArmMat = multiplyMatrices(rArmMat, createScaleMatrix(0.16, 0.5, 0.16));
+            drawCube(viewProj, rArmMat, COLOR_RED_SHIRT, uMVP, uColor, aPos, aNorm);
+
+            let lLegMat = multiplyMatrices(root, createTranslationMatrix(-0.14, 0.6, 0));
+            lLegMat = multiplyMatrices(lLegMat, createRotationXMatrix(-swing));
+            lLegMat = multiplyMatrices(lLegMat, createTranslationMatrix(0, -0.3, 0));
+            lLegMat = multiplyMatrices(lLegMat, createScaleMatrix(0.18, 0.6, 0.18));
+            drawCube(viewProj, lLegMat, COLOR_BLACK_TROUSERS, uMVP, uColor, aPos, aNorm);
+
+            let rLegMat = multiplyMatrices(root, createTranslationMatrix(0.14, 0.6, 0));
+            rLegMat = multiplyMatrices(rLegMat, createRotationXMatrix(swing));
+            rLegMat = multiplyMatrices(rLegMat, createTranslationMatrix(0, -0.3, 0));
+            rLegMat = multiplyMatrices(rLegMat, createScaleMatrix(0.18, 0.6, 0.18));
+            drawCube(viewProj, rLegMat, COLOR_BLACK_TROUSERS, uMVP, uColor, aPos, aNorm);
+        }
+
+        function render(time) {
+            let timeSec = time * 0.001;
+            let frameSeconds = Math.min(Math.max(timeSec - lastTime, 0), 0.25);
+            lastTime = timeSec;
+            updateFps(frameSeconds);
+            accumulator += frameSeconds;
+            let simulationSteps = 0;
+            while (accumulator >= FIXED_STEP && simulationSteps < MAX_SIMULATION_STEPS) {
+                update(FIXED_STEP);
+                accumulator -= FIXED_STEP;
+                simulationSteps++;
+            }
+            if (simulationSteps === MAX_SIMULATION_STEPS) accumulator = 0;
+
+            if (canvas.width !== window.innerWidth || canvas.height !== window.innerHeight) {
+                canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+                gl.viewport(0, 0, canvas.width, canvas.height);
+            }
+
+            if (gameState === "LOADING" || gameState === "READY") {
+                gl.useProgram(loadingProgram);
+                gl.uniform2f(gl.getUniformLocation(loadingProgram, "u_resolution"), canvas.width, canvas.height);
+                gl.uniform1f(gl.getUniformLocation(loadingProgram, "u_time"), timeSec);
+                const posLoc = gl.getAttribLocation(loadingProgram, "a_position");
+                gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
+                gl.enableVertexAttribArray(posLoc);
+                gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
+                gl.drawArrays(gl.TRIANGLES, 0, 6);
+            } else {
+                gl.enable(gl.DEPTH_TEST);
+                const cyclePhase = simulationSeconds / WEATHER_CYCLE_SECONDS;
+                const daylight = Math.max(0, Math.sin((cyclePhase - 0.15) * Math.PI * 2));
+                const skyBrightness = 0.025 + daylight * 0.07;
+                gl.clearColor(skyBrightness * 0.8, skyBrightness * 0.8, skyBrightness * 1.8, 1.0);
+                gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+                gl.useProgram(gameProgram);
+
+                let projMatrix = createPerspectiveMatrix(Math.PI / 3, canvas.width / canvas.height, 0.1, 500.0);
+                let rotMatrix = cameraRot.toMat4();
+                let viewMatrix = new Float32Array([
+                    rotMatrix[0], rotMatrix[4], rotMatrix[8], 0,
+                    rotMatrix[1], rotMatrix[5], rotMatrix[9], 0,
+                    rotMatrix[2], rotMatrix[6], rotMatrix[10], 0,
+                    0, 0, 0, 1
+                ]);
+
+                let eye = cameraPos;
+                viewMatrix[12] = -(viewMatrix[0]*eye.x + viewMatrix[4]*eye.y + viewMatrix[8]*eye.z);
+                viewMatrix[13] = -(viewMatrix[1]*eye.x + viewMatrix[5]*eye.y + viewMatrix[9]*eye.z);
+                viewMatrix[14] = -(viewMatrix[2]*eye.x + viewMatrix[6]*eye.y + viewMatrix[10]*eye.z);
+
+                let viewProj = multiplyMatrices(projMatrix, viewMatrix);
+
+                let uMVP = gl.getUniformLocation(gameProgram, "u_modelViewProjection");
+                let uColor = gl.getUniformLocation(gameProgram, "u_color");
+                let uLight = gl.getUniformLocation(gameProgram, "u_lightDirection");
+                gl.uniform3f(uLight, 0.35, -0.35 - daylight * 0.65, -0.2);
+
+                const aPos = gl.getAttribLocation(gameProgram, "a_position");
+                const aNorm = gl.getAttribLocation(gameProgram, "a_normal");
+
+                gl.enableVertexAttribArray(aPos);
+                gl.enableVertexAttribArray(aNorm);
+
+                // Draw the grass patch
+                for (let plat of platforms) {
+                    let platMat = createTranslationMatrix(plat.x, plat.y, plat.z);
+                    platMat = multiplyMatrices(platMat, createScaleMatrix(plat.sizeX, plat.sizeY, plat.sizeZ));
+                    drawCube(viewProj, platMat, plat.color, uMVP, uColor, aPos, aNorm);
+                }
+
+                const nametagEl = document.getElementById("remote-nametag");
+                const distanceEl = document.getElementById("nametag-distance");
+
+                let nearestRemote = null;
+                let nearestDistance = Infinity;
+                remotePlayers.forEach(remotePlayer => {
+                    renderHumanoid(viewProj, remotePlayer, uMVP, uColor, aPos, aNorm);
+                    let dx = cameraPos.x - remotePlayer.x;
+                    let dy = (cameraPos.y - 1.7) - remotePlayer.y;
+                    let dz = cameraPos.z - remotePlayer.z;
+                    let distance = Math.sqrt(dx*dx + dy*dy + dz*dz);
+                    if (distance < nearestDistance) {
+                        nearestDistance = distance;
+                        nearestRemote = remotePlayer;
+                    }
+                });
+
+                if (nearestRemote && !isPaused) {
+                    distanceEl.innerText = `${nearestDistance.toFixed(1)}m`;
+                    document.getElementById("nametag-name").innerText = nearestRemote.username;
+                    let headPos4 = [nearestRemote.x, nearestRemote.y + 1.8, nearestRemote.z, 1.0];
+                    let clipX = viewProj[0]*headPos4[0] + viewProj[4]*headPos4[1] + viewProj[8]*headPos4[2] + viewProj[12];
+                    let clipY = viewProj[1]*headPos4[0] + viewProj[5]*headPos4[1] + viewProj[9]*headPos4[2] + viewProj[13];
+                    let clipW = viewProj[3]*headPos4[0] + viewProj[7]*headPos4[1] + viewProj[11]*headPos4[2] + viewProj[15];
+
+                    if (clipW > 0) {
+                        nametagEl.style.left = `${(clipX / clipW * 0.5 + 0.5) * canvas.width}px`;
+                        nametagEl.style.top = `${(-clipY / clipW * 0.5 + 0.5) * canvas.height}px`;
+                        nametagEl.style.display = "block";
+                    } else {
+                        nametagEl.style.display = "none";
+                    }
+                } else {
+                    nametagEl.style.display = "none";
+                }
+            }
+
+            requestAnimationFrame(render);
+        }
+
+        requestAnimationFrame(render);
+    </script>
+</body>
+</html>

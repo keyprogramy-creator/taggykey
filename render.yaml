@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: kewl-game
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: AUTH_SECRET
+        generateValue: true
